@@ -53,7 +53,7 @@ def is_header(span):
     """
     Проверка, является ли текст в span заголовком (например, жирный текст).
     """
-    return (span["size"] > 13 or '+' in span["text"]) and "Bold" in span["font"] and not span["text"].strip().isdigit()
+    return "Bold" in span["font"]
 
 
 def clean_toc_lines(toc_text):
@@ -117,9 +117,6 @@ def parse_toc(cleaned_lines):
     return articles
 
 
-
-
-
 def extract_title(doc, start_page, toc_data):
     def sort_by_reference(arr1, arr2):
         position_map = {}
@@ -161,28 +158,43 @@ def extract_title(doc, start_page, toc_data):
     first_word_in_title = sort_by_reference(toc_data_list, header_list)[0]
 
     start_collecting_title = False
+    stop_collecting_title = False
+
+    stop_collecting = False
 
     title = ""
+    authors_and_companies = ""
 
     for block in blocks:
+        if stop_collecting:
+            break
         if "lines" not in block:
             continue
-
         for line_data in block["lines"]:
             for span in line_data["spans"]:
-                if is_header(span):
-                    text = span["text"].strip()
-                    if not start_collecting_title:
-                        splited_text = text.split(" ")
-                        for word in splited_text:
-                            if first_word_in_title == word:
-                                title += text + " "
-                                start_collecting_title = True
-                    else:
-                        title += text + " "
-                elif start_collecting_title:
-                    return title.strip()
+                text = span["text"].strip()
+                if not stop_collecting_title:
+                    if is_header(span):
+                        if not start_collecting_title:
+                            splited_text = text.split(" ")
+                            if not text.isdigit():
+                                for word in splited_text:
+                                    if first_word_in_title == word:
+                                        title += text + " "
+                                        start_collecting_title = True
+                        else:
+                            title += text + " "
+                    elif start_collecting_title:
+                        authors_and_companies += text + " "
+                        stop_collecting_title = True
 
+                elif not ("email" in text.lower() or "e-mail" in text.lower()):
+                    authors_and_companies += text + " "
+                else:
+                    stop_collecting = True
+                    break
+
+    return title.strip(), authors_and_companies.strip()
 
 
 def extract_article_data(doc, article, next_article_page=None):
@@ -200,9 +212,9 @@ def extract_article_data(doc, article, next_article_page=None):
     start_page = article["page_number"] - 1
     end_page = next_article_page - 1 if next_article_page else len(doc) - 1
 
-    article_data["title"] = extract_title(doc, start_page, toc_data)
-    # print(article_data)
-    # print(toc_data)
+    article_data["title"], article_data["authors"] = extract_title(doc, start_page, toc_data)
+    print(article_data)
+    # print(toc_data)c
 
 
     return article_data
