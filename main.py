@@ -117,7 +117,7 @@ def parse_toc(cleaned_lines):
     return articles
 
 
-def extract_title(doc, start_page, toc_data):
+def extract_title_authors_organizations(doc, start_page, toc_data):
     def sort_by_reference(arr1, arr2):
         position_map = {}
         for index, value in enumerate(arr2):
@@ -163,7 +163,7 @@ def extract_title(doc, start_page, toc_data):
     stop_collecting = False
 
     title = ""
-    authors_and_companies = ""
+    authors_and_organizations = ""
 
     for block in blocks:
         if stop_collecting:
@@ -172,6 +172,7 @@ def extract_title(doc, start_page, toc_data):
             continue
         for line_data in block["lines"]:
             for span in line_data["spans"]:
+
                 text = span["text"].strip()
                 if not stop_collecting_title:
                     if is_header(span):
@@ -185,16 +186,34 @@ def extract_title(doc, start_page, toc_data):
                         else:
                             title += text + " "
                     elif start_collecting_title:
-                        authors_and_companies += text + " "
+                        authors_and_organizations += text + " "
                         stop_collecting_title = True
 
                 elif not ("email" in text.lower() or "e-mail" in text.lower()):
-                    authors_and_companies += text + " "
+                    authors_and_organizations += text + " "
                 else:
                     stop_collecting = True
                     break
 
-    return title.strip(), authors_and_companies.strip()
+
+    title = title.strip()
+
+
+    authors_and_organizations = authors_and_organizations.replace("*", '')
+    authors_and_organizations = re.sub(r'\s*\d(,\d)?\s+', '  ', authors_and_organizations)
+    authors_and_organizations = re.sub(r'\d,', '', authors_and_organizations)
+    authors_and_organizations = re.sub(r'\s+,', ',', authors_and_organizations)
+    authors_and_organizations = re.sub(r'\b([A-ZA-Я])\.\s([A-ZА-Я])\.', r'\1.\2.', authors_and_organizations)
+    authors_and_organizations = authors_and_organizations.replace(". ", ".~~", 1)
+    splited_authors_and_organizations = authors_and_organizations.split("~~")
+
+    if len(splited_authors_and_organizations) == 2:
+        authors = splited_authors_and_organizations[0].strip()
+        splited_authors_and_organizations[1] = splited_authors_and_organizations[1].strip().replace("  ", "~~")
+        organizations = splited_authors_and_organizations[1].split("~~")[0].strip()
+        return title, authors, organizations
+
+    return None, None, None
 
 
 def extract_article_data(doc, article, next_article_page=None):
@@ -204,17 +223,16 @@ def extract_article_data(doc, article, next_article_page=None):
     article_data = {
         "title": None,  # Заголовок из содержания
         "authors": None,  # Авторы из содержания
-        "organizations": [],
-        "references": [],
+        "organizations": None,
+        "references": None,
     }
 
     toc_data = article["article_data"]
     start_page = article["page_number"] - 1
     end_page = next_article_page - 1 if next_article_page else len(doc) - 1
 
-    article_data["title"], article_data["authors"] = extract_title(doc, start_page, toc_data)
+    article_data["title"], article_data["authors"], article_data["organizations"] = extract_title_authors_organizations(doc, start_page, toc_data)
     print(article_data)
-    # print(toc_data)c
 
 
     return article_data
@@ -243,9 +261,9 @@ def main(pdf_path):
     toc_text = extract_toc_pages(pdf_path)
     cleaned_lines = clean_toc_lines(toc_text)
     toc_data = parse_toc(cleaned_lines)
-    extract_articles(toc_data, pdf_path)
+    articles_info = extract_articles(toc_data, pdf_path)
 
-    return toc_data
+    return articles_info
 
 
 # Использование скрипта
