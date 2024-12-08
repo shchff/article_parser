@@ -1,5 +1,18 @@
 import pymupdf, re, sys
 
+def extract_bibliographic_description(pdf_path):
+    doc = pymupdf.open(pdf_path)
+
+    page_text = doc.load_page(1).get_textpage().extractTEXT()
+    page_text = page_text.replace('\n', ' ')
+    page_text = re.sub(r'\s+', ' ', page_text)
+    page_text = re.sub(r'([А-Я])\s+(\d+)', r'\1\2', page_text)
+    first_part = re.split(r'Редакционная|ISBN', page_text)[0]
+    description = re.split(r'[А-Я]\d+', first_part)[-1].strip()
+
+    doc.close()
+
+    return description
 
 def extract_toc_pages(pdf_path):
     """
@@ -11,7 +24,6 @@ def extract_toc_pages(pdf_path):
     last_page_found = False
     last_page_number = len(doc)
     for page_num in range(len(doc)):
-
         if page_num > last_page_number:
             break
 
@@ -50,9 +62,6 @@ def extract_toc_pages(pdf_path):
 
 
 def is_header(span):
-    """
-    Проверка, является ли текст в span заголовком (например, жирный текст).
-    """
     return "Bold" in span["font"]
 
 
@@ -92,14 +101,13 @@ def parse_toc(cleaned_lines):
     """
     articles = []
 
-    # Регулярное выражение для строк с многоточиями
     pattern = re.compile(
-        r"(.+?)"  # Название статьи
-        r"\s?\.{3,}\s*(\d+)$"  # Многоточия и номер страницы
+        r"(.+?)"
+        r"\s?\.{3,}\s*(\d+)$"
     )
 
     for line in cleaned_lines:
-        if "..." not in line:  # Пропускаем строки без многоточий
+        if "..." not in line:
             continue
 
         match = pattern.match(line)
@@ -159,7 +167,6 @@ def extract_title_authors_organizations(doc, start_page, toc_data):
 
     start_collecting_title = False
     stop_collecting_title = False
-
     stop_collecting = False
 
     title = ""
@@ -172,7 +179,6 @@ def extract_title_authors_organizations(doc, start_page, toc_data):
             continue
         for line_data in block["lines"]:
             for span in line_data["spans"]:
-
                 text = span["text"].strip()
                 if not stop_collecting_title:
                     if is_header(span):
@@ -195,12 +201,10 @@ def extract_title_authors_organizations(doc, start_page, toc_data):
                     stop_collecting = True
                     break
 
-
     title = title.strip()
 
-
     authors_and_organizations = authors_and_organizations.replace("*", '')
-    authors_and_organizations = re.sub(r'\s*\d(,\d)?\s+', '  ', authors_and_organizations)
+    authors_and_organizations = re.sub(r'\s*\d(,\d)?\s+', ' ', authors_and_organizations)
     authors_and_organizations = re.sub(r'\d,', '', authors_and_organizations)
     authors_and_organizations = re.sub(r'\s+,', ',', authors_and_organizations)
     authors_and_organizations = re.sub(r'\b([A-ZA-Я])\.\s([A-ZА-Я])\.', r'\1.\2.', authors_and_organizations)
@@ -216,24 +220,20 @@ def extract_title_authors_organizations(doc, start_page, toc_data):
     return None, None, None
 
 
-def extract_article_data(doc, article, next_article_page=None):
+def extract_article_data(doc, article):
     """
     Извлекает данные статьи, используя данные из содержания.
     """
     article_data = {
-        "title": None,  # Заголовок из содержания
-        "authors": None,  # Авторы из содержания
+        "title": None,
+        "authors": None,
         "organizations": None,
-        "references": None,
     }
 
     toc_data = article["article_data"]
     start_page = article["page_number"] - 1
-    end_page = next_article_page - 1 if next_article_page else len(doc) - 1
 
     article_data["title"], article_data["authors"], article_data["organizations"] = extract_title_authors_organizations(doc, start_page, toc_data)
-    print(article_data)
-
 
     return article_data
 
@@ -246,8 +246,7 @@ def extract_articles(toc_data, pdf_path):
     articles = []
 
     for i, article in enumerate(toc_data):
-        next_page = toc_data[i + 1]["page_number"] if i + 1 < len(toc_data) else None
-        article_data = extract_article_data(doc, article, next_page)
+        article_data = extract_article_data(doc, article)
         articles.append(article_data)
 
     doc.close()
@@ -255,18 +254,15 @@ def extract_articles(toc_data, pdf_path):
 
 
 def main(pdf_path):
-    """
-    Основная функция для извлечения содержания из PDF.
-    """
+    bibliographic_description = extract_bibliographic_description(pdf_path)
     toc_text = extract_toc_pages(pdf_path)
     cleaned_lines = clean_toc_lines(toc_text)
     toc_data = parse_toc(cleaned_lines)
     articles_info = extract_articles(toc_data, pdf_path)
 
-    return articles_info
+    return bibliographic_description, articles_info
 
 
-# Использование скрипта
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Использование: python script.py <pdf_path>")
