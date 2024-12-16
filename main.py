@@ -1,4 +1,4 @@
-import pymupdf, re, sys
+import pymupdf, re, sys, pickle
 
 def extract_bibliographic_description(pdf_path):
     doc = pymupdf.open(pdf_path)
@@ -39,7 +39,7 @@ def extract_toc_pages(pdf_path):
                     text = span["text"].strip()
 
                     # Начинаем сбор с момента нахождения "СОДЕРЖАНИЕ"
-                    if "СОДЕРЖАНИЕ" in text:
+                    if "СОДЕРЖАНИЕ" in text.upper():
                         start_collecting = True
 
                     if start_collecting:
@@ -57,7 +57,6 @@ def extract_toc_pages(pdf_path):
         raise ValueError("Содержание не найдено.")
 
     doc.close()
-
     return toc_text
 
 
@@ -253,19 +252,20 @@ def extract_articles(toc_data, pdf_path):
     return articles
 
 
-def main(pdf_path):
+def main(pdf_path, pkl_path):
     bibliographic_description = extract_bibliographic_description(pdf_path)
     toc_text = extract_toc_pages(pdf_path)
     cleaned_lines = clean_toc_lines(toc_text)
     toc_data = parse_toc(cleaned_lines)
     articles_info = extract_articles(toc_data, pdf_path)
 
-    return bibliographic_description, articles_info
-
+    with open(pkl_path, 'wb') as f:
+        pickle.dump((bibliographic_description, articles_info), f, pickle.HIGHEST_PROTOCOL)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Использование: python script.py <pdf_path>")
+    if len(sys.argv) < 3:
+        print("Использование: python script.py <pdf_path> <pkl_path>")
         sys.exit(1)
     fname = sys.argv[1]
-    main(fname)
+    fpkl = sys.argv[2]
+    main(fname, fpkl)
